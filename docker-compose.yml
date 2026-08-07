@@ -1,0 +1,148 @@
+name: dotcard
+
+networks:
+  dotcard-network:
+    driver: bridge
+
+volumes:
+  dotcard_postgres_data:
+  authforge_postgres_data:
+  dotcard_rabbitmq_data:
+  dotcard_minio_data:
+
+services:
+  # ── DotCard-API ──────────────────────────────────────────────────────
+  dotcard-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - '${PORT:-3001}:3001'
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: dotcard-postgres
+      POSTGRES_PORT: '5432' # internal container port, not the 5433 mapped on the host
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      STORAGE_ENDPOINT: http://minio:9000
+    depends_on:
+      dotcard-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks: [dotcard-network]
+    restart: unless-stopped
+
+  dotcard-postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    ports:
+      - '${DOTCARD_POSTGRES_HOST_PORT:-5433}:5432'
+    volumes:
+      - dotcard_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [dotcard-network]
+    restart: unless-stopped
+
+  # ── AuthForge (submodule) ───────────────────────────────────────────
+  # Mirrors services/auth-forge/docker/docker-compose.yml. Deliberate
+  # differences from that file:
+  #  - service renamed from "postgres" to "authforge-postgres" (avoids a
+  #    name collision with dotcard-postgres on this shared network);
+  #  - env_file points at services/auth-forge/.env, not ../.env;
+  #  - host port kept at 5432, same as the original compose.
+  authforge-api:
+    build:
+      context: ./services/auth-forge
+      dockerfile: docker/Dockerfile
+    ports:
+      - '3000:3000'
+    env_file:
+      - ./services/auth-forge/.env
+    environment:
+      POSTGRES_HOST: authforge-postgres
+    depends_on:
+      authforge-postgres:
+        condition: service_healthy
+    networks: [dotcard-network]
+    restart: unless-stopped
+
+  authforge-postgres:
+    image: postgres:16-alpine
+    env_file:
+      - ./services/auth-forge/.env
+    ports:
+      - '5432:5432'
+    volumes:
+      - authforge_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [dotcard-network]
+    restart: unless-stopped
+
+  # ── MailForge (submodule) ───────────────────────────────────────────
+  # Mirrors services/mail-forge/docker/docker-compose.yml, adapted:
+  #  - no own "rabbitmq" service — uses the shared broker below
+  #    (dotcard-api owns the ecosystem's RabbitMQ, see ESCOPO.md §2);
+  #  - RABBITMQ_URL overridden to the "rabbitmq" service on this network;
+  #  - no HTTP port published — MailForge is a pure RMQ consumer.
+  mailforge-api:
+    build:
+      context: ./services/mail-forge
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ./services/mail-forge/.env
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks: [dotcard-network]
+    restart: unless-stopped
+
+  # ── Shared infrastructure ────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - dotcard_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [dotcard-network]
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    env_file:
+      - .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - dotcard_minio_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [dotcard-network]
+    restart: unless-stopped
