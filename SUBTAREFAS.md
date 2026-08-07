@@ -139,14 +139,14 @@ Criar a linha em `players` no primeiro acesso, a partir do JWT: gera `friend_cod
 **Pronto quando:** primeiro acesso de um usuário novo cria player com código único e saldo, e o razão registra o crédito.
 
 ### 3.4 Serviço de carteira (DotPoints)
-Recarga diária preguiçosa por `last_allowance_at` **completando o saldo até 10 sem acumular**, débito sob `SELECT ... FOR UPDATE`, e lançamento obrigatório em `balance_transactions` a cada movimento. Erro de saldo insuficiente.
+Débito sob `SELECT ... FOR UPDATE`, e lançamento obrigatório em `balance_transactions` a cada movimento. Erro de saldo insuficiente (`402`/`409`). **Não aplica recarga** — isso é responsabilidade exclusiva do endpoint de resgate (3.5). ⚠️ **Atualizado em 2026-08-08:** a recarga deixou de ser automática/preguiçosa — ver decisão no ESCOPO.md §7.
 **Depende de:** 3.3.
-**Pronto quando:** duas requisições concorrentes não gastam o mesmo saldo duas vezes (teste com transações simultâneas); quem ficou 5 dias sem jogar volta com 10 DotPoints, não 50; e todo movimento tem lançamento correspondente.
+**Pronto quando:** duas requisições concorrentes não gastam o mesmo saldo duas vezes (teste com transações simultâneas); todo movimento tem lançamento correspondente; pull sem resgate prévio e saldo insuficiente retorna erro sem debitar nada.
 
-### 3.5 Endpoint de perfil
-`GET /me` devolvendo saldo, `friend_code` e nome. `POST /me/friend-code/rotate`.
-**Depende de:** 3.3.
-**Pronto quando:** a rotação gera código novo e único, invalidando o anterior.
+### 3.5 Endpoint de perfil e resgate diário
+`GET /me` — saldo, `friend_code`, nome, e `dailyRewardAvailable` (leitura pura, sem efeito colateral). `POST /me/daily-reward/claim` — resgata a recarga diária sob `SELECT ... FOR UPDATE`: completa o saldo até 10 sem acumular, grava `balance_transactions` com `DAILY_ALLOWANCE`, `409` se já resgatado hoje. `POST /me/friend-code/rotate`.
+**Depende de:** 3.3, 3.4.
+**Pronto quando:** resgatar duas vezes no mesmo dia retorna 409 na segunda vez; quem ficou 5 dias sem resgatar recebe 10 DotPoints ao resgatar, não 50; `dailyRewardAvailable` reflete corretamente o estado antes e depois do resgate; a rotação de friend-code gera código novo e único, invalidando o anterior.
 
 ---
 
@@ -163,7 +163,7 @@ Sorteio em dois passos (raridade pela distribuição → carta uniforme dentro d
 **Pronto quando:** os testes unitários cobrirem — distribuição estatística aderente à config em amostra grande; renormalização com raridade vazia; **carta com soft delete nunca sorteada**; float sempre dentro de `(0,1)`.
 
 ### 4.3 Endpoint de abertura de pacote
-`POST /collections/:id/pulls` com tamanho ∈ {1,5,10} validado por enum. Transação única de 7 passos conforme seção 6 do ESCOPO: gera `pull_id`, trava o player, aplica recarga, valida e debita saldo, sorteia e insere as cartas, commita.
+`POST /collections/:id/pulls` com tamanho ∈ {1,5,10} validado por enum. Transação única de 6 passos conforme seção 6 do ESCOPO (⚠️ não aplica recarga — ver §7): gera `pull_id`, trava o player, valida e debita saldo, sorteia e insere as cartas, commita.
 **Depende de:** 4.2, 3.4.
 **Pronto quando:** um pull debita exatamente o custo configurado, todas as cartas compartilham o `pull_id`, e falha por saldo insuficiente não gera carta nem lançamento.
 
@@ -284,7 +284,7 @@ Como subir o ambiente, variáveis de ambiente, e a **disciplina de submodules** 
 
 | Pendência | Decisão | Tarefas afetadas |
 |---|---|---|
-| **P1** — aquisição de moeda | DotPoints, 1 por carta, recarga diária de 10 sem acúmulo | 3.2, 3.4 |
+| **P1** — aquisição de moeda | DotPoints, 1 por carta, resgate diário explícito de 10 sem acúmulo (não automático — atualizado em 2026-08-08) | 3.2, 3.4, 3.5 |
 | **P2** — sessão ativa | **Não implementada** — a janela de 15 min é aceita conscientemente | nenhuma |
 | **P3** — livro-razão | `balance_transactions` | 3.1, 3.4 |
 | **P4** — agrupamento de pacote | `pull_id` | 4.1, 4.3 |

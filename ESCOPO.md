@@ -300,15 +300,14 @@ Essa ordem é o que faz "lendária = 1%" significar literalmente 1%. O protótip
 
 ### Transação do pull
 
-Tudo num único commit:
+Tudo num único commit (6 passos — não aplica recarga, ver §7):
 
 1. Gera o `pull_id` (UUID) que identificará este pacote
 2. `SELECT ... FOR UPDATE` na linha do jogador em `players`
-3. Aplica recarga diária se `last_allowance_at` for de dia anterior — completa o saldo até 10 DotPoints, gravando `balance_transactions` com `DAILY_ALLOWANCE`
-4. Valida saldo suficiente; se não, erro (`402`/`409`)
-5. Debita o custo do pacote — gravando `balance_transactions` com `PACK_PURCHASE` e o `pull_id`
-6. Sorteia e insere as N cartas, todas com o mesmo `pull_id`
-7. Commit
+3. Valida saldo suficiente contra o saldo atual; se não, erro (`402`/`409` — o jogador precisa resgatar primeiro em `POST /me/daily-reward/claim`)
+4. Debita o custo do pacote — gravando `balance_transactions` com `PACK_PURCHASE` e o `pull_id`
+5. Sorteia e insere as N cartas, todas com o mesmo `pull_id`
+6. Commit
 
 Após o commit, fora da transação: verifica completude de coleção e publica notificações (best effort).
 
@@ -338,20 +337,28 @@ Como o preço é linear, pacotes maiores são conveniência, não vantagem econ�
 
 ### Semântica da recarga
 
-A recarga **completa o saldo até 10, sem acumular**. Quem não joga por uma semana não acumula 70 DotPoints; ao voltar, tem 10. É o modelo clássico de energia diária, e é o que preserva a escassez que justifica as trocas.
+A recarga **completa o saldo até 10, sem acumular**. Quem não resgata por uma semana não acumula 70 DotPoints; ao resgatar, tem 10. É o modelo clássico de energia diária, e é o que preserva a escassez que justifica as trocas.
 
-Aplicada preguiçosamente: no momento do pull, se `last_allowance_at` for de um dia anterior, o saldo é completado até 10 (lançamento `DAILY_ALLOWANCE` com a diferença creditada) antes da cobrança. Sem scheduler.
+✅ **DECISÃO (2026-08-08): resgate é uma ação explícita do jogador, não automática.** A recarga não é aplicada silenciosamente em nenhum outro endpoint — nem no `GET /me`, nem no pull. O jogador precisa chamar `POST /me/daily-reward/claim` para receber os DotPoints do dia. É a mecânica clássica de "recompensa diária" de jogos com energia/moeda regenerável, escolhida deliberadamente para criar um motivo de engajamento ativo (o jogador volta todo dia para resgatar), não só de consumo passivo.
+
+Regras:
+- Disponível quando `last_allowance_at` é de um dia anterior (ou nulo). Chamar fora dessa janela retorna `409 Conflict`.
+- Resgatar sempre **completa até 10, nunca acumula** — mesmo depois de vários dias sem resgatar, o crédito é sempre até o teto, nunca soma os dias perdidos.
+- `GET /me` expõe se o resgate está disponível hoje (`dailyRewardAvailable: boolean`) para o frontend decidir se mostra o botão, mas **não aplica a recarga** — é leitura pura, sem efeito colateral.
+- O saldo **inicial** (`INITIAL_GRANT`, na criação do `players`) continua automático — é um grant único de boas-vindas, não faz parte da mecânica de resgate diário.
+- O pull **não aplica recarga nenhuma**: debita sobre o saldo atual tal como está. Se o jogador não resgatou hoje e o saldo não cobre o pacote, o erro de saldo insuficiente (`402`/`409`) é a sinalização para resgatar primeiro.
+
+**Considerado e descartado:** aplicar a recarga automaticamente (no pull e/ou no `GET /me`), e forçar reautenticação diária para garantir que o cliente sempre revisitasse um endpoint "fresco". A primeira opção removeria o gancho de engajamento que a mecânica de resgate existe para criar; a segunda exigiria mexer em semântica de sessão do AuthForge (fora do que ele deve saber — seria vocabulário de jogo vazando para um serviço genérico) e ainda não garantiria, por si só, que o resgate fosse chamado.
 
 ### Regras invariantes
 
 - Saldo vive em `players.balance`, sempre inteiro.
 - Débito acontece na mesma transação da geração, sob `SELECT ... FOR UPDATE`, evitando gasto duplo por requisições simultâneas.
+- Resgate também trava a linha do jogador sob `SELECT ... FOR UPDATE`, pelo mesmo motivo — dois cliques em "resgatar" simultâneos não podem creditar duas vezes.
 - **Toda** alteração de saldo grava uma linha em `balance_transactions` na mesma transação — o saldo nunca muda sem rastro.
 - Preços, recarga e saldo inicial ficam no arquivo de configuração do jogo, ajustáveis sem tocar em código.
 
 Fora de escopo: compra de DotPoints com dinheiro real, marketplace, venda de cartas de volta ao sistema.
-
-Fora de escopo: compra de moeda com dinheiro real, marketplace, venda de cartas de volta ao sistema.
 
 ---
 
@@ -475,8 +482,9 @@ Sem prefixo de versão na URL (ver seção 3). Todos exigem autenticação, salv
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `POST` | `/collections/:id/pulls` | abre pacote (body: tamanho ∈ {1,5,10}) |
-| `GET` | `/me` | perfil: saldo, `friend_code`, nome |
+| `POST` | `/collections/:id/pulls` | abre pacote (body: tamanho ∈ {1,5,10}) — não aplica recarga, debita o saldo atual |
+| `GET` | `/me` | perfil: saldo, `friend_code`, nome, `dailyRewardAvailable` |
+| `POST` | `/me/daily-reward/claim` | resgata a recarga diária — `409` se já resgatado hoje |
 | `GET` | `/me/cards` | acervo próprio, paginado |
 | `GET` | `/users/:id/cards` | **ADMIN** — acervo de terceiro |
 | `POST` | `/me/friend-code/rotate` | gera novo código |
