@@ -1,0 +1,6 @@
+[submodule "services/auth-forge"]
+	path = services/auth-forge
+	url = git@github.com:gustavofont/AuthForge.git
+[submodule "services/mail-forge"]
+	path = services/mail-forge
+	url = git@github.com:gustavofont/MailForge.git
