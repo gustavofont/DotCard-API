@@ -144,9 +144,9 @@ Débito sob `SELECT ... FOR UPDATE`, e lançamento obrigatório em `balance_tran
 **Pronto quando:** duas requisições concorrentes não gastam o mesmo saldo duas vezes (teste com transações simultâneas); todo movimento tem lançamento correspondente; pull sem resgate prévio e saldo insuficiente retorna erro sem debitar nada.
 
 ### 3.5 Endpoint de perfil e resgate diário
-`GET /me` — saldo, `friend_code`, nome, e `dailyRewardAvailable` (leitura pura, sem efeito colateral). `POST /me/daily-reward/claim` — resgata a recarga diária sob `SELECT ... FOR UPDATE`: completa o saldo até 10 sem acumular, grava `balance_transactions` com `DAILY_ALLOWANCE`, `409` se já resgatado hoje. `POST /me/friend-code/rotate`.
+`GET /me` — saldo, `friend_code`, nome, e `dailyRewardAvailable` (leitura pura, sem efeito colateral). `POST /me/daily-reward/claim` — resgata sob `SELECT ... FOR UPDATE`: **soma +10 ao saldo atual, sem teto** (⚠️ atualizado em 2026-08-08 — não completa mais até 10, acumula), grava `balance_transactions` com `DAILY_ALLOWANCE`, `409` se já resgatado hoje. `POST /me/friend-code/rotate`.
 **Depende de:** 3.3, 3.4.
-**Pronto quando:** resgatar duas vezes no mesmo dia retorna 409 na segunda vez; quem ficou 5 dias sem resgatar recebe 10 DotPoints ao resgatar, não 50; `dailyRewardAvailable` reflete corretamente o estado antes e depois do resgate; a rotação de friend-code gera código novo e único, invalidando o anterior.
+**Pronto quando:** resgatar duas vezes no mesmo dia retorna 409 na segunda vez; resgatar em dias consecutivos acumula (10 → 20 → 30, não estaciona em 10); quem ficou 29 dias sem resgatar recebe só +10 ao resgatar no dia 30, não o acumulado retroativo dos dias perdidos; `dailyRewardAvailable` reflete corretamente o estado antes e depois do resgate; a rotação de friend-code gera código novo e único, invalidando o anterior.
 
 ---
 
@@ -284,7 +284,7 @@ Como subir o ambiente, variáveis de ambiente, e a **disciplina de submodules** 
 
 | Pendência | Decisão | Tarefas afetadas |
 |---|---|---|
-| **P1** — aquisição de moeda | DotPoints, 1 por carta, resgate diário explícito de 10 sem acúmulo (não automático — atualizado em 2026-08-08) | 3.2, 3.4, 3.5 |
+| **P1** — aquisição de moeda | DotPoints, 1 por carta, resgate diário explícito de +10 (não automático, sem teto de acúmulo — atualizado em 2026-08-08) | 3.2, 3.4, 3.5 |
 | **P2** — sessão ativa | **Não implementada** — a janela de 15 min é aceita conscientemente | nenhuma |
 | **P3** — livro-razão | `balance_transactions` | 3.1, 3.4 |
 | **P4** — agrupamento de pacote | `pull_id` | 4.1, 4.3 |

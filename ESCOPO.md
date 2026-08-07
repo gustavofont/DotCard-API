@@ -317,7 +317,7 @@ Após o commit, fora da transação: verifica completude de coleção e publica 
 
 ## 7. Economia — DotPoints
 
-A moeda do jogo chama-se **DotPoints**. Ela existe como **mecanismo de escassez**, não como marketplace: limita quantos pacotes o jogador abre por dia, o que é o que dá sentido às trocas.
+A moeda do jogo chama-se **DotPoints**. Ela existe como **mecanismo de escassez**, não como marketplace: limita o **ritmo de renda** do jogador (nunca mais que um resgate por dia), o que é o que dá sentido às trocas — não mais um teto de gasto por dia, ver decisão abaixo.
 
 ### Preços e renda
 
@@ -329,24 +329,33 @@ Preço linear de **1 DotPoint por carta**:
 | 5 cartas | 5 DotPoints |
 | 10 cartas | 10 DotPoints |
 
-**Recarga diária: 10 DotPoints** — o suficiente para dois pacotes de 5, ou um de 10, ou dez de 1. Em qualquer combinação, o teto é **10 cartas por dia**.
+**Resgate diário: +10 DotPoints por resgate**, uma vez por dia (`POST /me/daily-reward/claim`) — o suficiente para dois pacotes de 5, ou um de 10, ou dez de 1, **por resgate**. Não é mais um teto diário de gasto (ver decisão abaixo): quem represa vários resgates pode abrir mais que isso num único dia.
 
-O saldo inicial, na criação do `players`, é igual à recarga diária (10 DotPoints), lançado como `INITIAL_GRANT`.
+O saldo inicial, na criação do `players`, é igual ao valor de um resgate (10 DotPoints), lançado como `INITIAL_GRANT`.
 
 Como o preço é linear, pacotes maiores são conveniência, não vantagem econômica — não há desconto por volume.
 
-### Semântica da recarga
+### Semântica do resgate e do acúmulo
 
-A recarga **completa o saldo até 10, sem acumular**. Quem não resgata por uma semana não acumula 70 DotPoints; ao resgatar, tem 10. É o modelo clássico de energia diária, e é o que preserva a escassez que justifica as trocas.
+✅ **DECISÃO (2026-08-08): sem teto de saldo — os pontos se acumulam entre resgates.**
+
+Substitui a semântica anterior ("completa até 10, sem acumular"). Como o resgate agora é uma ação manual do jogador (decisão logo abaixo), o modelo de "energia que nunca ultrapassa 10" deixou de se justificar — o jogador já precisa agir deliberadamente para receber os pontos, então não há razão para descartar o que ele resgatou e não gastou. Cada resgate **soma** 10 ao saldo atual (`balance += 10`), sem limite superior.
+
+**Exemplo:** dia 0, saldo inicial = 10. Se o jogador resgata todo dia sem gastar, no dia 1 tem 20, no dia 2 tem 30. Se pular 29 dias e só voltar no dia 30, ele resgata **uma única vez** (um resgate por dia é o limite, não por "dia perdido") e recebe **+10** — os resgates dos 29 dias que faltou não são recuperados retroativamente, mas o resgate do dia 30 vale o valor cheio, de qualquer forma.
+
+**O que isso muda na natureza da escassez:** antes, o teto era de **gasto** (nunca mais que 10 cartas por dia, não importa o quanto o jogador tivesse guardado). Agora o teto é de **renda** (nunca mais que +10 por dia efetivamente resgatado) — o jogador pode escolher gastar tudo assim que resgata, ou represar para abrir pacotes maiores depois. A escassez de longo prazo é a mesma (limitada pelos dias em que ele resgatou), mas o controle de *quando* gastar passa a ser do jogador.
+
+**Motivo adicional para não ter teto:** deixa o caminho aberto para uma futura funcionalidade de **compra de DotPoints** (seção 14, hoje fora do MVP mas não descartada). Um saldo com teto de 10 tornaria essa compra sem sentido — ninguém pagaria por pontos que o próprio sistema descarta acima de um limite. Sem teto, comprar DotPoints vira, no futuro, apenas mais uma `reason` em `balance_transactions` (ex.: `PURCHASE`), sem exigir nenhuma revisão do modelo de saldo que está sendo fechado agora.
 
 ✅ **DECISÃO (2026-08-08): resgate é uma ação explícita do jogador, não automática.** A recarga não é aplicada silenciosamente em nenhum outro endpoint — nem no `GET /me`, nem no pull. O jogador precisa chamar `POST /me/daily-reward/claim` para receber os DotPoints do dia. É a mecânica clássica de "recompensa diária" de jogos com energia/moeda regenerável, escolhida deliberadamente para criar um motivo de engajamento ativo (o jogador volta todo dia para resgatar), não só de consumo passivo.
 
 Regras:
-- Disponível quando `last_allowance_at` é de um dia anterior (ou nulo). Chamar fora dessa janela retorna `409 Conflict`.
-- Resgatar sempre **completa até 10, nunca acumula** — mesmo depois de vários dias sem resgatar, o crédito é sempre até o teto, nunca soma os dias perdidos.
+- Disponível quando `last_allowance_at` é `NULL` ou é anterior à meia-noite **UTC** do dia corrente (`last_allowance_at < date_trunc('day', now())`). O corte é por dia calendário em UTC, não por 24h rolantes desde o último resgate — mais simples de o jogador entender ("reseta à meia-noite UTC"), ao custo de uma janela inofensiva de poucos minutos (resgatar às 23:59 e de novo às 00:01). Chamar fora da janela retorna `409 Conflict`.
+- Cada resgate soma **+10 ao saldo atual**, sem teto — ver semântica de acúmulo acima.
+- Dias sem resgate não são recuperados retroativamente: resgatar hoje sempre credita o valor de um único dia, independente de quantos dias se passaram desde o último resgate.
 - `GET /me` expõe se o resgate está disponível hoje (`dailyRewardAvailable: boolean`) para o frontend decidir se mostra o botão, mas **não aplica a recarga** — é leitura pura, sem efeito colateral.
 - O saldo **inicial** (`INITIAL_GRANT`, na criação do `players`) continua automático — é um grant único de boas-vindas, não faz parte da mecânica de resgate diário.
-- O pull **não aplica recarga nenhuma**: debita sobre o saldo atual tal como está. Se o jogador não resgatou hoje e o saldo não cobre o pacote, o erro de saldo insuficiente (`402`/`409`) é a sinalização para resgatar primeiro.
+- O pull **não aplica recarga nenhuma**: debita sobre o saldo atual tal como está. Se o saldo não cobre o pacote, o erro de saldo insuficiente (`402`/`409`) é a sinalização para resgatar primeiro.
 
 **Considerado e descartado:** aplicar a recarga automaticamente (no pull e/ou no `GET /me`), e forçar reautenticação diária para garantir que o cliente sempre revisitasse um endpoint "fresco". A primeira opção removeria o gancho de engajamento que a mecânica de resgate existe para criar; a segunda exigiria mexer em semântica de sessão do AuthForge (fora do que ele deve saber — seria vocabulário de jogo vazando para um serviço genérico) e ainda não garantiria, por si só, que o resgate fosse chamado.
 
@@ -530,7 +539,7 @@ Dados fictícios de tema fantasia/RPG: ~20–30 cartas distribuídas nas 4 rarid
 
 Registrado explicitamente para não ser reaberto sem decisão consciente:
 
-- Marketplace, compra de moeda com dinheiro real, venda de carta ao sistema
+- Marketplace, compra de moeda com dinheiro real, venda de carta ao sistema — mas o saldo já foi desenhado sem teto (§7) justamente para não travar essa porta quando ela for reaberta
 - Decks e mecânica de partida/batalha — o jogo é, por ora, apenas colecionável
 - Queimar/descartar carta; inventário com stack
 - Achievements e leaderboard
