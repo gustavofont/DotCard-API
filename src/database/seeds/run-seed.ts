@@ -1,8 +1,13 @@
-import 'dotenv/config';
+import dataSource from '../data-source';
+import { seedCatalog } from './catalog.seed';
 
-function run(): Promise<void> {
-  console.log('No seeds registered yet.');
-  return Promise.resolve();
+async function run(): Promise<void> {
+  const source = await dataSource.initialize();
+  try {
+    await seedCatalog(source);
+  } finally {
+    await source.destroy();
+  }
 }
 
 run()

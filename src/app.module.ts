@@ -9,6 +9,7 @@ import { LoggerModule } from './common/logger/logger.module';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CardsModule } from './modules/cards/cards.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { HealthModule } from './modules/health/health.module';
     DatabaseModule,
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
     AuthModule,
+    CardsModule,
     HealthModule,
   ],
   providers: [
