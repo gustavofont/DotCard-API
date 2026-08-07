@@ -39,7 +39,7 @@ Clonar com `git clone --recurse-submodules`. Atenção a detached HEAD ao trabal
 
 NestJS 11 + TypeScript, PostgreSQL + TypeORM com migrations versionadas, Swagger, class-validator, Jest. Estrutura de pastas espelha o AuthForge: `src/common/`, `src/config/`, `src/database/`, `src/modules/<domínio>/{controllers,services,entities,dto}`.
 
-Respostas em DTO puro + exception filters do Nest — sem envelope customizado. Paginação offset/limit. Prefixo `/v1`. Todo comportamento configurável vive em arquivos de config, nunca em constantes espalhadas.
+Respostas em DTO puro + exception filters do Nest — sem envelope customizado. Paginação offset/limit. Sem prefixo de versão na URL (removido em 2026-08-07, ver ESCOPO.md §3). Todo comportamento configurável vive em arquivos de config, nunca em constantes espalhadas.
 
 ## Invariantes de domínio
 

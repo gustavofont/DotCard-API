@@ -1,4 +1,4 @@
-import { RequestMethod, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -17,10 +17,6 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
 
-  app.setGlobalPrefix('v1', {
-    exclude: [{ path: 'health', method: RequestMethod.GET }],
-  });
-
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -37,7 +33,7 @@ async function bootstrap(): Promise<void> {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('v1/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   await app.listen(appConfig.port);
 }

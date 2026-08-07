@@ -59,7 +59,8 @@ Ao alterar qualquer arquivo dentro de `services/`, é obrigatório **commitar e 
 - **Dockerfile multi-stage** (node:22-alpine, deps → build → runtime, usuário não-root)
 - **CI**: lint + test + build
 - Logger padrão do Nest com formato estruturado
-- Prefixo de versão **`/v1`** desde o início
+
+> ⚠️ **Sem prefixo de versão na URL.** Chegou a ser adotado (`/v1`) e foi removido em 2026-08-07: sem cliente publicado ainda, o custo de reverter era zero, e a razão original (evitar breaking change simultâneo em todo consumidor) só se paga depois que existe consumidor de verdade. Se/quando isso mudar, reavaliar — mas versionar de URL não é a única opção (header `Accept-Version`, por exemplo, evita reescrever toda rota).
 
 ### Convenções
 
@@ -456,29 +457,29 @@ Upload integrado ao CRUD administrativo de cartas.
 
 ## 12. API
 
-Todos os endpoints sob `/v1`. Todos exigem autenticação, salvo indicação contrária.
+Sem prefixo de versão na URL (ver seção 3). Todos exigem autenticação, salvo indicação contrária.
 
 ### Catálogo
 
 | Método | Rota | Acesso |
 |---|---|---|
-| `GET` | `/v1/cards` | autenticado — paginado, filtros por coleção/raridade/tipo |
-| `GET` | `/v1/cards/:id` | autenticado |
-| `GET` | `/v1/cards/types` | autenticado |
-| `POST` | `/v1/cards` | **ADMIN** |
-| `PATCH` | `/v1/cards/:id` | **ADMIN** |
-| `DELETE` | `/v1/cards/:id` | **ADMIN** — soft delete |
-| `GET` | `/v1/collections` | autenticado |
+| `GET` | `/cards` | autenticado — paginado, filtros por coleção/raridade/tipo |
+| `GET` | `/cards/:id` | autenticado |
+| `GET` | `/cards/types` | autenticado |
+| `POST` | `/cards` | **ADMIN** |
+| `PATCH` | `/cards/:id` | **ADMIN** |
+| `DELETE` | `/cards/:id` | **ADMIN** — soft delete |
+| `GET` | `/collections` | autenticado |
 
 ### Jogo
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `POST` | `/v1/collections/:id/pulls` | abre pacote (body: tamanho ∈ {1,5,10}) |
-| `GET` | `/v1/me` | perfil: saldo, `friend_code`, nome |
-| `GET` | `/v1/me/cards` | acervo próprio, paginado |
-| `GET` | `/v1/users/:id/cards` | **ADMIN** — acervo de terceiro |
-| `POST` | `/v1/me/friend-code/rotate` | gera novo código |
+| `POST` | `/collections/:id/pulls` | abre pacote (body: tamanho ∈ {1,5,10}) |
+| `GET` | `/me` | perfil: saldo, `friend_code`, nome |
+| `GET` | `/me/cards` | acervo próprio, paginado |
+| `GET` | `/users/:id/cards` | **ADMIN** — acervo de terceiro |
+| `POST` | `/me/friend-code/rotate` | gera novo código |
 
 O `userId` **sempre** vem do token, nunca do body.
 
@@ -486,22 +487,22 @@ O `userId` **sempre** vem do token, nunca do body.
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/v1/friends` | lista amigos e convites pendentes |
-| `POST` | `/v1/friends/invites` | convida por `friendCode` |
-| `POST` | `/v1/friends/invites/:id/accept` | aceita |
-| `DELETE` | `/v1/friends/invites/:id` | recusa |
-| `DELETE` | `/v1/friends/:userId` | desfaz amizade |
+| `GET` | `/friends` | lista amigos e convites pendentes |
+| `POST` | `/friends/invites` | convida por `friendCode` |
+| `POST` | `/friends/invites/:id/accept` | aceita |
+| `DELETE` | `/friends/invites/:id` | recusa |
+| `DELETE` | `/friends/:userId` | desfaz amizade |
 
 ### Trocas
 
 | Método | Rota | Quem pode |
 |---|---|---|
-| `GET` | `/v1/trades` | participantes |
-| `GET` | `/v1/trades/:id` | participantes |
-| `POST` | `/v1/trades` | cria (body: `toUserId`, `offeredCardId`) |
-| `POST` | `/v1/trades/:id/counterpart` | `to_user` — escolhe sua carta |
-| `POST` | `/v1/trades/:id/confirm` | `from_user` — decisão final |
-| `POST` | `/v1/trades/:id/cancel` | **ambos**, a qualquer momento |
+| `GET` | `/trades` | participantes |
+| `GET` | `/trades/:id` | participantes |
+| `POST` | `/trades` | cria (body: `toUserId`, `offeredCardId`) |
+| `POST` | `/trades/:id/counterpart` | `to_user` — escolhe sua carta |
+| `POST` | `/trades/:id/confirm` | `from_user` — decisão final |
+| `POST` | `/trades/:id/cancel` | **ambos**, a qualquer momento |
 
 ### Operacional
 

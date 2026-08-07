@@ -68,9 +68,9 @@ Orquestrar: `dotcard-api`, `dotcard-postgres` (5433), `authforge-api` (3000), `a
 **Pronto quando:** retorna 200 com os dois serviços de pé e 503 com o Postgres derrubado.
 
 ### 0.8 Bootstrap da aplicação
-`main.ts` com prefixo global `/v1`, `ValidationPipe` global, Helmet, CORS, Swagger e exception filters.
+`main.ts` com `ValidationPipe` global, Helmet, CORS, Swagger e exception filters. ⚠️ **Atualizado em 2026-08-07:** o prefixo global `/v1` foi removido — ver ESCOPO.md §3.
 **Depende de:** 0.3.
-**Pronto quando:** `/v1/docs` abre o Swagger e um DTO inválido retorna 400 formatado.
+**Pronto quando:** `/docs` abre o Swagger e um DTO inválido retorna 400 formatado.
 
 ---
 
@@ -103,12 +103,12 @@ Enums `rarity` e `card_type`; entidades `Collection` e `Card` conforme seções 
 **Pronto quando:** `npm run seed` popula e é idempotente.
 
 ### 2.3 Leitura do catálogo
-`GET /v1/cards` paginado com filtros por coleção, raridade e tipo; `GET /v1/cards/:id`; `GET /v1/cards/types`; `GET /v1/collections`. Todos autenticados.
+`GET /cards` paginado com filtros por coleção, raridade e tipo; `GET /cards/:id`; `GET /cards/types`; `GET /collections`. Todos autenticados.
 **Depende de:** 2.1, 1.2.
 **Pronto quando:** filtros combinam corretamente e cartas com soft delete não aparecem.
 
 ### 2.4 Escrita do catálogo (admin)
-`POST /v1/cards`, `PATCH /v1/cards/:id`, `DELETE /v1/cards/:id` (soft), todos exigindo role `ADMIN`.
+`POST /cards`, `PATCH /cards/:id`, `DELETE /cards/:id` (soft), todos exigindo role `ADMIN`.
 **Depende de:** 2.3.
 **Pronto quando:** usuário sem `ADMIN` recebe 403 e o delete apenas preenche `deleted_at`.
 
@@ -144,7 +144,7 @@ Recarga diária preguiçosa por `last_allowance_at` **completando o saldo até 1
 **Pronto quando:** duas requisições concorrentes não gastam o mesmo saldo duas vezes (teste com transações simultâneas); quem ficou 5 dias sem jogar volta com 10 DotPoints, não 50; e todo movimento tem lançamento correspondente.
 
 ### 3.5 Endpoint de perfil
-`GET /v1/me` devolvendo saldo, `friend_code` e nome. `POST /v1/me/friend-code/rotate`.
+`GET /me` devolvendo saldo, `friend_code` e nome. `POST /me/friend-code/rotate`.
 **Depende de:** 3.3.
 **Pronto quando:** a rotação gera código novo e único, invalidando o anterior.
 
@@ -163,12 +163,12 @@ Sorteio em dois passos (raridade pela distribuição → carta uniforme dentro d
 **Pronto quando:** os testes unitários cobrirem — distribuição estatística aderente à config em amostra grande; renormalização com raridade vazia; **carta com soft delete nunca sorteada**; float sempre dentro de `(0,1)`.
 
 ### 4.3 Endpoint de abertura de pacote
-`POST /v1/collections/:id/pulls` com tamanho ∈ {1,5,10} validado por enum. Transação única de 7 passos conforme seção 6 do ESCOPO: gera `pull_id`, trava o player, aplica recarga, valida e debita saldo, sorteia e insere as cartas, commita.
+`POST /collections/:id/pulls` com tamanho ∈ {1,5,10} validado por enum. Transação única de 7 passos conforme seção 6 do ESCOPO: gera `pull_id`, trava o player, aplica recarga, valida e debita saldo, sorteia e insere as cartas, commita.
 **Depende de:** 4.2, 3.4.
 **Pronto quando:** um pull debita exatamente o custo configurado, todas as cartas compartilham o `pull_id`, e falha por saldo insuficiente não gera carta nem lançamento.
 
 ### 4.4 Consulta de acervo
-`GET /v1/me/cards` paginado com filtros; `GET /v1/users/:id/cards` restrito a `ADMIN`.
+`GET /me/cards` paginado com filtros; `GET /users/:id/cards` restrito a `ADMIN`.
 **Depende de:** 4.1, 1.2.
 **Pronto quando:** só retorna cartas cujo `owner` é o usuário do token (ou qualquer um, no caso admin).
 
@@ -203,12 +203,12 @@ Paralelizável com as fases 4 e 5.
 **Pronto quando:** tentar inserir a mesma relação em ordem invertida viola a PK.
 
 ### 6.2 Convite e aceite
-`POST /v1/friends/invites` por `friend_code`, `POST /v1/friends/invites/:id/accept`, `DELETE /v1/friends/invites/:id` (recusa, apaga a linha). Tratar colisão de PK por convite mútuo como **aceite automático**.
+`POST /friends/invites` por `friend_code`, `POST /friends/invites/:id/accept`, `DELETE /friends/invites/:id` (recusa, apaga a linha). Tratar colisão de PK por convite mútuo como **aceite automático**.
 **Depende de:** 6.1, 3.5.
 **Pronto quando:** convite mútuo resulta em amizade `ACCEPTED` direto, sem erro.
 
 ### 6.3 Listagem e remoção
-`GET /v1/friends` (amigos e convites pendentes, com `display_name`), `DELETE /v1/friends/:userId` (apaga a linha).
+`GET /friends` (amigos e convites pendentes, com `display_name`), `DELETE /friends/:userId` (apaga a linha).
 **Depende de:** 6.2.
 **Pronto quando:** a listagem exibe nomes sem nenhuma chamada HTTP ao AuthForge.
 
@@ -224,22 +224,22 @@ Enum `trade_status`; `TradeOffer` (seção 5.6) e `ActiveTradeLock` (seção 5.7
 **Pronto quando:** a PK de `active_trade_locks` impede duas travas para o mesmo usuário.
 
 ### 7.2 Criação de proposta
-`POST /v1/trades` com `toUserId` e `offeredCardId`. Valida amizade `ACCEPTED` (403 se não houver), posse da carta oferecida, e insere as **duas** linhas de trava na mesma transação.
+`POST /trades` com `toUserId` e `offeredCardId`. Valida amizade `ACCEPTED` (403 se não houver), posse da carta oferecida, e insere as **duas** linhas de trava na mesma transação.
 **Depende de:** 7.1, 6.3.
 **Pronto quando:** criar segunda proposta com qualquer um dos dois participantes já travado retorna 409; e não-amigo retorna 403.
 
 ### 7.3 Contraproposta
-`POST /v1/trades/:id/counterpart`. Só o `to_user`, só em `AWAITING_COUNTERPART`. Valida posse da carta oferecida e avança para `AWAITING_CONFIRMATION`.
+`POST /trades/:id/counterpart`. Só o `to_user`, só em `AWAITING_COUNTERPART`. Valida posse da carta oferecida e avança para `AWAITING_CONFIRMATION`.
 **Depende de:** 7.2.
 **Pronto quando:** outro usuário que não o destinatário recebe 403, e estado inválido retorna 409.
 
 ### 7.4 Confirmação e execução ⭐ **transação crítica**
-`POST /v1/trades/:id/confirm`. Só o `from_user`, só em `AWAITING_CONFIRMATION`. Numa transação: trava as duas cartas com `FOR UPDATE ORDER BY id`, revalida posse dos dois lados, troca os `owner`, marca `ACCEPTED` e remove as duas travas.
+`POST /trades/:id/confirm`. Só o `from_user`, só em `AWAITING_CONFIRMATION`. Numa transação: trava as duas cartas com `FOR UPDATE ORDER BY id`, revalida posse dos dois lados, troca os `owner`, marca `ACCEPTED` e remove as duas travas.
 **Depende de:** 7.3.
 **Pronto quando:** as duas cartas trocam de dono no mesmo commit, `pulled_by` e `float_value` permanecem intactos, e ambos os usuários ficam livres para novas trocas.
 
 ### 7.5 Cancelamento
-`POST /v1/trades/:id/cancel`, disponível para **ambos** os participantes em qualquer estado não-terminal. Grava `cancelled_by` e libera as travas.
+`POST /trades/:id/cancel`, disponível para **ambos** os participantes em qualquer estado não-terminal. Grava `cancelled_by` e libera as travas.
 **Depende de:** 7.2.
 **Pronto quando:** os dois lados conseguem cancelar nas duas fases, e as travas somem.
 
@@ -254,7 +254,7 @@ Rodar a verificação da 5.2 **para os dois usuários** após o commit da troca 
 **Pronto quando:** completar coleção via troca dispara a notificação.
 
 ### 7.8 Consulta de trocas
-`GET /v1/trades` e `GET /v1/trades/:id`, restritos aos participantes.
+`GET /trades` e `GET /trades/:id`, restritos aos participantes.
 **Depende de:** 7.2.
 **Pronto quando:** terceiro não envolvido recebe 403.
 
